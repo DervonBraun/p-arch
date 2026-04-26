@@ -3,21 +3,17 @@ using Archipelago.Core;
 using Archipelago.Session;
 using MessagePipe;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Zenject;
 
 namespace Archipelago.Player
 {
     /// <summary>
     /// First-person character controller.
-    /// Uses CharacterController + Input System (new).
-    ///
-    /// Automatically blocks/restores movement based on SessionState:
-    ///   FreeRoam  → movement on, cursor locked
-    ///   MiniGame / Scanning / Routine → movement off, cursor conditionally free
+    /// Движение и взгляд читаются через InputReader (события Moved / Looked).
+    /// Блокировка движения — по SessionStateChangedMessage (без изменений).
     ///
     /// PERF: Camera pitch clamped every frame — O(1), no allocations.
-    /// Zenject: MonoBehaviour → use [Inject] field injection, not constructor.
+    /// THREAD: main thread only.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class FirstPersonController : MonoBehaviour
@@ -34,37 +30,52 @@ namespace Archipelago.Player
         [SerializeField] private float     _mouseSensitivity = 1f;
         [SerializeField] private float     _pitchClamp       = 85f;
 
-        // ── Zenject Field Injection ───────────────────────────────
+        // ── Injected ─────────────────────────────────────────────
 
+        [Inject] private InputReader                             _inputReader;
         [Inject] private ISubscriber<SessionStateChangedMessage> _sessionSub;
 
         // ── Private ──────────────────────────────────────────────
 
-        private CharacterController        _cc;
-        private ArchipelagoInputActions    _input;
-        private IDisposable                _subscription;
+        private CharacterController _cc;
+        private IDisposable         _subscription;
 
         private Vector3 _velocity;
+        private Vector2 _moveInput;
+        private Vector2 _lookInput;
         private float   _pitch;
         private bool    _movementEnabled = true;
+        private bool    _sprinting;
 
         // ── Unity Lifecycle ──────────────────────────────────────
 
         private void Awake()
         {
-            // PERF: Cache — never call GetComponent in Update
+            // PERF: cache — never call GetComponent in Update
             _cc = GetComponent<CharacterController>();
-
-            _input = new ArchipelagoInputActions();
-            _input.Enable();
 
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible   = false;
         }
 
+        private void OnEnable()
+        {
+            _inputReader.Moved          += OnMoved;
+            _inputReader.Looked         += OnLooked;
+            _inputReader.SprintStarted  += OnSprintStarted;
+            _inputReader.SprintCancelled += OnSprintCancelled;
+        }
+
+        private void OnDisable()
+        {
+            _inputReader.Moved          -= OnMoved;
+            _inputReader.Looked         -= OnLooked;
+            _inputReader.SprintStarted  -= OnSprintStarted;
+            _inputReader.SprintCancelled -= OnSprintCancelled;
+        }
+
         private void Start()
         {
-            // Zenject injects _sessionSub before Start(), safe to subscribe here.
             _subscription = _sessionSub.Subscribe(OnSessionStateChanged);
         }
 
@@ -77,24 +88,26 @@ namespace Archipelago.Player
 
         private void OnDestroy()
         {
-            _input?.Disable();
-            _input?.Dispose();
             _subscription?.Dispose();
 
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
         }
 
+        // ── Input Handlers ────────────────────────────────────────
+
+        private void OnMoved(Vector2 value)           => _moveInput = value;
+        private void OnLooked(Vector2 value)          => _lookInput = value;
+        private void OnSprintStarted()                => _sprinting = true;
+        private void OnSprintCancelled()              => _sprinting = false;
+
         // ── Movement ─────────────────────────────────────────────
 
         private void HandleMovement()
         {
-            var   move2d   = _input.Player.Move.ReadValue<Vector2>();
-            bool  sprinting = _input.Player.Sprint.IsPressed();
-            float speed     = sprinting ? _sprintSpeed : _walkSpeed;
-
-            Vector3 dir = transform.right   * move2d.x
-                        + transform.forward * move2d.y;
+            float   speed = _sprinting ? _sprintSpeed : _walkSpeed;
+            Vector3 dir   = transform.right   * _moveInput.x
+                          + transform.forward * _moveInput.y;
 
             _cc.Move(dir * (speed * Time.deltaTime));
         }
@@ -112,26 +125,22 @@ namespace Archipelago.Player
 
         private void HandleLook()
         {
-            var lookDelta = _input.Player.Look.ReadValue<Vector2>();
+            transform.Rotate(Vector3.up, _lookInput.x * _mouseSensitivity);
 
-            transform.Rotate(Vector3.up, lookDelta.x * _mouseSensitivity);
-
-            _pitch -= lookDelta.y * _mouseSensitivity;
+            _pitch -= _lookInput.y * _mouseSensitivity;
             _pitch  = Mathf.Clamp(_pitch, -_pitchClamp, _pitchClamp);
 
             if (_cameraRoot != null)
                 _cameraRoot.localEulerAngles = new Vector3(_pitch, 0f, 0f);
         }
 
-        // ── Session State Reaction ────────────────────────────────
+        // ── Session State ─────────────────────────────────────────
 
         private void OnSessionStateChanged(SessionStateChangedMessage msg)
         {
             _movementEnabled = msg.Next is SessionState.FreeRoam or SessionState.WakeUp;
 
-            bool freeCursor = msg.Next is SessionState.Scanning
-                                       or SessionState.MiniGame;
-
+            bool freeCursor = msg.Next is SessionState.Scanning or SessionState.MiniGame;
             Cursor.lockState = freeCursor ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible   = freeCursor;
         }

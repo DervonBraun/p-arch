@@ -13,9 +13,12 @@ namespace Archipelago.Session
     /// Does NOT own mini-game, scan, or routine logic.
     /// Those systems publish completion events; SessionManager reacts.
     ///
+    /// ИЗМЕНЕНИЕ v1.1: убран IInitializable — Initialize() вызывается явно
+    /// из GameBootstrapper после завершения async boot (TokenService init).
+    ///
     /// THREAD: All state transitions must happen on the main thread.
     /// </summary>
-    public sealed class SessionManager : IInitializable, IDisposable, ISaveable
+    public sealed class SessionManager : IDisposable, ISaveable
     {
         // ── State ────────────────────────────────────────────────
 
@@ -23,9 +26,9 @@ namespace Archipelago.Session
 
         // ── Dependencies ─────────────────────────────────────────
 
-        private readonly IPublisher<SessionStateChangedMessage>  _statePublisher;
-        private readonly ISubscriber<MiniGameCompletedMessage>   _miniGameSub;
-        private readonly ISubscriber<RoutineCompletedMessage>    _routineSub;
+        private readonly IPublisher<SessionStateChangedMessage> _statePublisher;
+        private readonly ISubscriber<MiniGameCompletedMessage>  _miniGameSub;
+        private readonly ISubscriber<RoutineCompletedMessage>   _routineSub;
 
         private IDisposable _subscriptions;
 
@@ -33,27 +36,35 @@ namespace Archipelago.Session
 
         [Inject]
         public SessionManager(
-            IPublisher<SessionStateChangedMessage>  statePublisher,
-            ISubscriber<MiniGameCompletedMessage>   miniGameSub,
-            ISubscriber<RoutineCompletedMessage>    routineSub)
+            IPublisher<SessionStateChangedMessage> statePublisher,
+            ISubscriber<MiniGameCompletedMessage>  miniGameSub,
+            ISubscriber<RoutineCompletedMessage>   routineSub)
         {
             _statePublisher = statePublisher;
             _miniGameSub    = miniGameSub;
             _routineSub     = routineSub;
         }
 
-        // ── IInitializable ───────────────────────────────────────
+        // ── Explicit init (called from GameBootstrapper) ──────────
 
+        /// <summary>
+        /// Вызывается из GameBootstrapper.BootAsync() после завершения
+        /// всех async инициализаций (TokenService и т.д.).
+        /// </summary>
         public void Initialize()
         {
-            var bag = DisposableBag.CreateBuilder();
+            if (_subscriptions != null)
+            {
+                Debug.LogWarning("[SessionManager] Initialize called twice — ignored.");
+                return;
+            }
 
+            var bag = DisposableBag.CreateBuilder();
             _miniGameSub.Subscribe(OnMiniGameCompleted).AddTo(bag);
             _routineSub .Subscribe(OnRoutineCompleted) .AddTo(bag);
-
             _subscriptions = bag.Build();
 
-            TransitionTo(SessionState.WakeUp);
+            TransitionTo(SessionState.FreeRoam); // TODO: вернуть WakeUp когда анимация готова
             Debug.Log("[SessionManager] Initialized.");
         }
 
@@ -83,6 +94,7 @@ namespace Archipelago.Session
         /// <summary>Call from ScannerController when scanner UI opens.</summary>
         public void EnterScanning()
         {
+            Debug.Log($"[SessionManager] EnterScanning called, current: {CurrentState}");
             if (CurrentState != SessionState.FreeRoam) return;
             TransitionTo(SessionState.Scanning);
         }

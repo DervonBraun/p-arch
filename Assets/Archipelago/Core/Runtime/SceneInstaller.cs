@@ -1,4 +1,5 @@
 ﻿using Archipelago.Player;
+using Archipelago.Scanner;
 using Archipelago.Session;
 using MessagePipe;
 using UnityEngine;
@@ -9,26 +10,25 @@ namespace Archipelago.Core
     /// <summary>
     /// Scene-level installer. Attach to SceneContext в каждой игровой сцене.
     ///
-    /// Биндит всё в одном контейнере:
-    ///   - MessagePipe (BindMessagePipe + все брокеры)
-    ///   - GameClock, SessionManager (POCO сервисы)
-    ///   - GameLoopRunner, FirstPersonController (scene MonoBehaviours)
-    ///
-    /// Почему всё здесь, а не в ProjectInstaller:
-    ///   MessagePipe.Zenject требует что IPublisher/ISubscriber резолвятся
-    ///   из того же контейнера что и их потребители. GameLoopRunner и FPC
-    ///   живут в SceneContext — значит MessagePipe и сервисы тоже должны
-    ///   быть здесь. ProjectInstaller остаётся пустым для single-scene проекта.
+    /// Порядок инициализации через BindExecutionOrder:
+    ///   -200  GameClock        (корневой тик)
+    ///   -100  SessionManager   (FSM)
+    ///     0   остальные сервисы
     /// </summary>
     public sealed class SceneInstaller : MonoInstaller
     {
         [Header("Scene References")]
         [SerializeField] private FirstPersonController _fpc;
         [SerializeField] private GameLoopRunner        _gameLoopRunner;
+        [SerializeField] private InputRouter           _inputRouter;
+
+        [Header("Input")]
+        [SerializeField] private InputReader _inputReader;   // ScriptableObject asset
 
         public override void InstallBindings()
         {
             InstallMessagePipe();
+            InstallInput();
             InstallServices();
             InstallSceneObjects();
         }
@@ -54,14 +54,28 @@ namespace Archipelago.Core
             Container.BindMessageBroker<SaveDeniedMessage>(options);
         }
 
+        // ── Input ─────────────────────────────────────────────────
+
+        private void InstallInput()
+        {
+            // InputReader — ScriptableObject, живёт в Assets/.
+            // Биндим как инстанс чтобы все потребители получили один и тот же SO.
+            if (_inputReader != null)
+                Container.BindInstance(_inputReader).AsSingle();
+            else
+                Debug.LogError("[SceneInstaller] InputReader не назначен. Создай asset и назначь в Inspector.");
+
+            // InputRouter — MonoBehaviour на Player, переключает Input Maps по SessionState.
+            if (_inputRouter != null)
+                Container.Bind<InputRouter>().FromInstance(_inputRouter).AsSingle();
+            else
+                Debug.LogWarning("[SceneInstaller] InputRouter не назначен в инспекторе.");
+        }
+
         // ── POCO Services ─────────────────────────────────────────
 
         private void InstallServices()
         {
-            // BindInterfacesAndSelfTo биндит конкретный тип + все реализованные
-            // интерфейсы (IInitializable, IDisposable, ISaveable) на один инстанс.
-            // Zenject автоматически вызывает Initialize() и Dispose().
-
             Container.BindInterfacesAndSelfTo<GameClock>()
                      .AsSingle()
                      .NonLazy();
