@@ -432,7 +432,7 @@ namespace Archipelago.Scanner
                 _economyConfig);
 
             _costLabel.text = cost.Red > 0 || cost.Green > 0
-                ? $"{cost.Red}🔴  {cost.Green}🟢"
+                ? $"{cost.Red}  {cost.Green}"
                 : "";
         }
 

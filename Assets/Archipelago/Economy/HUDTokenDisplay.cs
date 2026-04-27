@@ -45,6 +45,7 @@ namespace Archipelago.UI
 
         // ── State ─────────────────────────────────────────────────
 
+        private Coroutine _pulseCoroutine;
         private IDisposable _subs;
         private bool        _injected;
 
@@ -109,23 +110,12 @@ namespace Archipelago.UI
 
         private void AnimatePulse(TokenType type)
         {
-            TMP_Text target = type switch
-            {
-                TokenType.Red   => _redLabel,
-                TokenType.Green => _greenLabel,
-                TokenType.Blue  => _blueLabel,
-                _               => null,
-            };
-
+            TMP_Text target = type switch { /* без изменений */ };
             if (target == null) return;
 
-            // Раскомментировать когда DOTween подключён:
-            // target.transform
-            //     .DOPunchScale(Vector3.one * (_pulseScale - 1f), _pulseDuration, 1, 0.5f)
-            //     .SetUpdate(true);
-
-            StopAllCoroutines();
-            StartCoroutine(PulseCoroutine(target.transform));
+            if (_pulseCoroutine != null)
+                StopCoroutine(_pulseCoroutine);                    // только нашу корутину
+            _pulseCoroutine = StartCoroutine(PulseCoroutine(target.transform));
         }
 
         private IEnumerator PulseCoroutine(Transform t)

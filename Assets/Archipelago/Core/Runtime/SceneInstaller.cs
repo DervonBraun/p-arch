@@ -54,6 +54,9 @@ namespace Archipelago.Core
             // Effects
             Container.BindMessageBroker<EffectAppliedMessage>(options);
             Container.BindMessageBroker<EffectExpiredMessage>(options);
+            Container.BindMessageBroker<EarnMultiplierChangedMessage>(options);   // <-- новый
+            Container.BindMessageBroker<CleanStateChangedMessage>(options);       // <-- новый
+            Container.BindMessageBroker<GardenMultiplierChangedMessage>(options); // <-- новый
 
             // Routine
             Container.BindMessageBroker<RoutineCompletedMessage>(options);

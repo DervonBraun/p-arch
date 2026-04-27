@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Archipelago.Core;
+using Archipelago.Economy;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using UnityEngine;
@@ -43,26 +44,31 @@ namespace Archipelago.Scanner
         private readonly IPublisher<ScanRequestedMessage>        _requestPub;
         private readonly IPublisher<ScanCompletedMessage>        _completedPub;
         private readonly ISubscriber<SessionStateChangedMessage> _stateSub;
-
-        private const string DevPlayerId = "dev_player_01";
-
+        
+        private readonly EconomyConfig _economyConfig;
+        private readonly TokenService  _tokenService;
+        
         [Inject]
         public ScannerService(
             GroqClient                               groqClient,
             ScanCache                                cache,
             ScannerConfig                            config,
+            EconomyConfig                            economyConfig,   // <-- новый
+            TokenService                             tokenService,    // <-- новый
             ScanCollection                           collection,
             IPublisher<ScanRequestedMessage>         requestPub,
             IPublisher<ScanCompletedMessage>         completedPub,
             ISubscriber<SessionStateChangedMessage>  stateSub)
         {
-            _groqClient   = groqClient;
-            _cache        = cache;
-            _config       = config;
-            _collection   = collection;
-            _requestPub   = requestPub;
-            _completedPub = completedPub;
-            _stateSub     = stateSub;
+            _groqClient    = groqClient;
+            _cache         = cache;
+            _config        = config;
+            _economyConfig = economyConfig;
+            _tokenService  = tokenService;
+            _collection    = collection;
+            _requestPub    = requestPub;
+            _completedPub  = completedPub;
+            _stateSub      = stateSub;
         }
 
         // ── IInitializable / IDisposable ─────────────────────────
@@ -133,6 +139,30 @@ namespace Archipelago.Scanner
             var objects = _session.AttachedObjects;
             if (objects.Count == 0) return;
 
+            // ── Cost check ────────────────────────────────────────────
+            var cost = ScanCostCalculator.Calculate(
+                attachedObjectCount: objects.Count,
+                questionText:        query,
+                isFirstRequest:      _session.IsFirstScan,
+                config:              _economyConfig);
+
+            if (!_tokenService.CanAfford(TokenType.Red, cost.Red))
+            {
+                Debug.Log($"[ScannerService] Insufficient red tokens: need {cost.Red}, have {_tokenService.Balance.Red}");
+                return;
+            }
+            if (cost.Green > 0 && !_tokenService.CanAfford(TokenType.Green, cost.Green))
+            {
+                Debug.Log($"[ScannerService] Insufficient green tokens: need {cost.Green}, have {_tokenService.Balance.Green}");
+                return;
+            }
+
+            if (cost.Red > 0)
+                _tokenService.Spend(TokenType.Red, cost.Red, "scan_query");
+            if (cost.Green > 0)
+                _tokenService.Spend(TokenType.Green, cost.Green, "scan_init");
+            // ─────────────────────────────────────────────────────────
+
             IsScanning = true;
             _session.AddUserMessage(query);
 
@@ -182,7 +212,7 @@ namespace Archipelago.Scanner
             {
                 ObjectIds = objects.Select(o => o.objectId).ToList(),
                 Messages  = messages,
-                PlayerId  = DevPlayerId
+                PlayerId = _economyConfig.DevPlayerId
             };
         }
     }

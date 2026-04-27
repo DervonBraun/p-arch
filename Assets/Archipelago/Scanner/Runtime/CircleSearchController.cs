@@ -47,29 +47,39 @@ namespace Archipelago.Scanner
         private bool            _drawing;
         private Vector2         _lastSamplePos;
         private readonly List<Vector2> _path = new(256);
+        private Camera _camera;
         
         private bool _injected;
-        
-        [Inject]
-        private void Construct()
-        {
-            _injected = true;
-            if (isActiveAndEnabled) SubscribeInput();
-        }
 
-        // ── Unity Lifecycle ──────────────────────────────────────
+        [Inject]
+        private void Construct(
+            FirstPersonController fpsController,
+            InputReader           inputReader,
+            ScanCollection        collection,
+            CircleSearchOverlay   overlay,
+            IPublisher<ObjectCapturedMessage> capturePub)
+        {
+            _fpsController = fpsController;
+            _inputReader   = inputReader;
+            _collection    = collection;
+            _overlay       = overlay;
+            _capturePub    = capturePub;
+            _injected      = true;
+        }
 
         private void OnEnable()
         {
-            if (!_injected) return;
+            if (!_injected) return;   // объект активен до инжекта — пропускаем
             SubscribeInput();
         }
 
-        private void OnDisable()
+        private void OnDisable() => UnsubscribeInput();
+        private void Awake()
         {
-            if (!_injected) return;
-            UnsubscribeInput();
+            _camera = Camera.main;
         }
+
+        // ── Unity Lifecycle ──────────────────────────────────────
 
         private void SubscribeInput()
         {
@@ -153,7 +163,6 @@ namespace Archipelago.Scanner
                 return;
             }
 
-            var camera    = Camera.main;
             var scannables = FindObjectsByType<ScannableObject>(FindObjectsSortMode.None);
             bool anyNew   = false;
 
@@ -162,7 +171,7 @@ namespace Archipelago.Scanner
                 if (s.Data == null) continue;
                 if (_collection.Contains(s.Data.objectId)) continue;
 
-                float coverage = ComputeScreenCoverage(s, camera, _path);
+                float coverage = ComputeScreenCoverage(s, _camera, _path);
                 if (coverage < _captureThreshold) continue;
 
                 _collection.TryAdd(s.Data, s.Data.thumbnailSprite);

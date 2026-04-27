@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c8b072abb214309a1d11936d52d1e5e, type: 3}
+  m_Name: EffectDefinition
+  m_EditorClassIdentifier: Assembly-CSharp::Archipelago.Effects.EffectDefinitionSO
+  effectId: satiety
+  displayName: "\u0421\u044B\u0442\u043E\u0441\u0442\u044C"
+  maxDuration: 300
+  stackTimerExtension: 20
+  maxStacks: 3
+  baseModifier: 0.1
+  modifierPerStack: 0.05

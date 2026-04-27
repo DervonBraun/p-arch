@@ -326,4 +326,27 @@ namespace Archipelago.Core
         public readonly int Current;
         public SaveDeniedMessage(int required, int current) { Required = required; Current = current; }
     }
+    public readonly struct EarnMultiplierChangedMessage
+    {
+        public readonly float  Multiplier;
+        public readonly string Source;
+        public EarnMultiplierChangedMessage(float multiplier, string source)
+        { Multiplier = multiplier; Source = source; }
+    }
+
+    /// <summary>Публикуется CleanHandler при применении/истечении эффекта чистоты.</summary>
+    public readonly struct CleanStateChangedMessage
+    {
+        public readonly bool IsClean;
+        public CleanStateChangedMessage(bool isClean) => IsClean = isClean;
+    }
+
+    /// <summary>Публикуется GardenHandler при изменении множителя сада.</summary>
+    public readonly struct GardenMultiplierChangedMessage
+    {
+        public readonly float  Multiplier;
+        public readonly string Source;
+        public GardenMultiplierChangedMessage(float multiplier, string source)
+        { Multiplier = multiplier; Source = source; }
+    }
 }
