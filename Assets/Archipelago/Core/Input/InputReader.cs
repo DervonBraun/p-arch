@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -8,9 +8,9 @@ namespace Archipelago.Core
     /// Single access point for all input actions.
     /// ScriptableObject — инжектится через Zenject.
     ///
-    /// События названы с суффиксом существительного (Moved, Scanned и т.д.),
-    /// чтобы не конфликтовать с методами интерфейса IGameplayActions / IScannerActions
-    /// (OnMove, OnScan и т.д.) — C# иначе путает event и метод.
+    /// Tab short press  → PanelOpenRequested  (or CircleSearchCloseRequested when overlay is open)
+    /// Tab hold ≥0.4s   → CircleSearchOpenRequested
+    /// While IsCircleSearchOpen: Moved and Looked events are suppressed.
     ///
     /// THREAD: main thread only.
     /// </summary>
@@ -27,27 +27,37 @@ namespace Archipelago.Core
         public event Action          SprintStarted;
         public event Action          SprintCancelled;
 
-        /// <summary>ПКМ зажата — режим сканирования активен.</summary>
         public event Action ScanHeld;
-
-        /// <summary>ПКМ отпущена — режим сканирования выключен.</summary>
         public event Action ScanReleased;
 
-        /// <summary>Tab в Gameplay map — открыть панель диалога.</summary>
+        /// <summary>Tab short release in Gameplay map — open inventory/chat panel.</summary>
         public event Action PanelOpenRequested;
+
+        /// <summary>Tab short release while CircleSearch overlay is open — close it.</summary>
+        public event Action CircleSearchCloseRequested;
+
+        /// <summary>Tab held ≥0.4s in Gameplay map — open CircleSearch overlay.</summary>
+        public event Action CircleSearchOpenRequested;
 
         // ── Scanner Events ───────────────────────────────────────
 
-        /// <summary>Enter в Scanner map — отправить запрос.</summary>
         public event Action SubmitRequested;
-
-        /// <summary>Tab / Escape в Scanner map — закрыть панель.</summary>
         public event Action PanelCloseRequested;
 
         // ── State ────────────────────────────────────────────────
 
-        /// <summary>True пока ПКМ зажата. InputRouter использует для блокировки Tab.</summary>
+        /// <summary>True while RMB is held (legacy, kept for backward compat).</summary>
         public bool IsScanHeld { get; private set; }
+
+        /// <summary>
+        /// Set by CircleSearchController when the overlay is active.
+        /// Suppresses Moved/Looked so the camera freezes.
+        /// </summary>
+        public bool IsCircleSearchOpen { get; set; }
+
+        // Tracks whether CircleSearch.performed fired for the current Tab press,
+        // so the subsequent OpenPanel.performed (release) can be suppressed.
+        private bool _circleSearchFiredThisPress;
 
         private ArchipelagoInputActions _actions;
 
@@ -89,10 +99,16 @@ namespace Archipelago.Core
         // ── IGameplayActions ──────────────────────────────────────
 
         void ArchipelagoInputActions.IGameplayActions.OnMove(InputAction.CallbackContext ctx)
-            => Moved?.Invoke(ctx.ReadValue<Vector2>());
+        {
+            if (!IsCircleSearchOpen)
+                Moved?.Invoke(ctx.ReadValue<Vector2>());
+        }
 
         void ArchipelagoInputActions.IGameplayActions.OnLook(InputAction.CallbackContext ctx)
-            => Looked?.Invoke(ctx.ReadValue<Vector2>());
+        {
+            if (!IsCircleSearchOpen)
+                Looked?.Invoke(ctx.ReadValue<Vector2>());
+        }
 
         void ArchipelagoInputActions.IGameplayActions.OnInteract(InputAction.CallbackContext ctx)
         {
@@ -107,7 +123,6 @@ namespace Archipelago.Core
 
         void ArchipelagoInputActions.IGameplayActions.OnScan(InputAction.CallbackContext ctx)
         {
-            Debug.Log($"[InputReader] OnScan phase: {ctx.phase}");
             if (ctx.started)
             {
                 IsScanHeld = true;
@@ -122,13 +137,40 @@ namespace Archipelago.Core
 
         void ArchipelagoInputActions.IGameplayActions.OnOpenPanel(InputAction.CallbackContext ctx)
         {
-            Debug.Log($"[InputReader] OnOpenPanel phase: {ctx.phase}, IsScanHeld: {IsScanHeld}");
-            if (ctx.performed && !IsScanHeld)
+
+            if (ctx.started)
+            {
+                _circleSearchFiredThisPress = false;
+                return;
+            }
+
+            if (!ctx.performed) return;
+            if (IsScanHeld) return;
+
+            if (_circleSearchFiredThisPress)
+            {
+                _circleSearchFiredThisPress = false;
+                return;
+            }
+
+            if (IsCircleSearchOpen)
+                CircleSearchCloseRequested?.Invoke();
+            else
+            {
                 PanelOpenRequested?.Invoke();
+            }
         }
 
-        // Заглушки для actions которые есть в asset но не используются в игровой логике.
-        // Если понадобятся — добавить события по аналогии выше.
+        void ArchipelagoInputActions.IGameplayActions.OnCircleSearch(InputAction.CallbackContext ctx)
+        {
+            // Hold interaction: performed fires when Tab has been held ≥ hold duration.
+            if (ctx.performed && !IsCircleSearchOpen)
+            {
+                _circleSearchFiredThisPress = true;
+                CircleSearchOpenRequested?.Invoke();
+            }
+        }
+
         void ArchipelagoInputActions.IGameplayActions.OnNext(InputAction.CallbackContext ctx) { }
         void ArchipelagoInputActions.IGameplayActions.OnPrevious(InputAction.CallbackContext ctx) { }
 

@@ -75,7 +75,16 @@
                     "id": "82479259-83db-44b7-8759-3fe54359ae1e",
                     "expectedControlType": "",
                     "processors": "",
-                    "interactions": "",
+                    "interactions": "Press(behavior=1)",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CircleSearch",
+                    "type": "Button",
+                    "id": "d4e5f6a7-b8c9-4d00-d111-e22222222222",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "Hold",
                     "initialStateCheck": false
                 }
             ],
@@ -363,6 +372,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "OpenPanel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f7a8b9c0-d1e2-4a00-f333-444444444444",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CircleSearch",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

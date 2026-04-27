@@ -31,8 +31,8 @@ namespace Archipelago.Economy
                 .AsSingle();
 
             Container.Bind<TokenService>()
-                .AsSingle()
-                .NonLazy(); // инициализируем сразу, не по запросу
+                .AsSingle();
+            
         }
     }
 }

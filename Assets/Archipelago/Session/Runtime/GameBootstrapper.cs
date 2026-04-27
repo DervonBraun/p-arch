@@ -14,7 +14,7 @@ namespace Archipelago.Core
     ///
     /// THREAD: всё на main thread.
     /// </summary>
-    public sealed class GameBootstrapper : Singleton<GameBootstrapper>
+    public sealed class GameBootstrapper : MonoBehaviour
     {
         // ── Injected ──────────────────────────────────────────────
 
@@ -32,6 +32,14 @@ namespace Archipelago.Core
 
         private async UniTaskVoid BootAsync()
         {
+            
+            // LIMITATION: если Zenject не завершил inject — сервисы null.
+            if (_tokenService == null || _sessionManager == null)
+            {
+                Debug.LogError("[GameBootstrapper] Inject не завершён. " +
+                               "Проверь порядок installers в SceneContext.");
+                return;
+            }
             Debug.Log("[GameBootstrapper] Boot start.");
 
             // 1. Загружаем баланс токенов с сервера.
@@ -42,7 +50,7 @@ namespace Archipelago.Core
 
             // 2. Стартуем FSM сессии.
             //    SessionManager.Initialize() публикует первый SessionStateChangedMessage,
-            //    на который подписаны InputRouter, ScannerController и т.д.
+            //    на который подписаны InputRouter, ScannerUIController и т.д.
             _sessionManager.Initialize();
 
             Debug.Log("[GameBootstrapper] Boot complete.");

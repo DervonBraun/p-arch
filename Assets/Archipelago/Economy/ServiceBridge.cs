@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using Archipelago.Core;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
 using UnityEngine;

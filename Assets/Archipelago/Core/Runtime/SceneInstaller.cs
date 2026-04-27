@@ -23,7 +23,7 @@ namespace Archipelago.Core
         [SerializeField] private InputRouter           _inputRouter;
 
         [Header("Input")]
-        [SerializeField] private InputReader _inputReader;   // ScriptableObject asset
+        [SerializeField] private InputReader _inputReader;
 
         public override void InstallBindings()
         {
@@ -39,17 +39,35 @@ namespace Archipelago.Core
         {
             var options = Container.BindMessagePipe();
 
+            // Clock
             Container.BindMessageBroker<GameTickMessage>(options);
             Container.BindMessageBroker<DayChangedMessage>(options);
+
+            // Session
             Container.BindMessageBroker<SessionStateChangedMessage>(options);
+
+            // Economy
             Container.BindMessageBroker<TokensChangedMessage>(options);
+            Container.BindMessageBroker<TokensSyncedMessage>(options);
+            Container.BindMessageBroker<TokensInsufficientMessage>(options);
+
+            // Effects
             Container.BindMessageBroker<EffectAppliedMessage>(options);
             Container.BindMessageBroker<EffectExpiredMessage>(options);
+
+            // Routine
             Container.BindMessageBroker<RoutineCompletedMessage>(options);
+
+            // Scanner
+            Container.BindMessageBroker<ObjectCapturedMessage>(options);
             Container.BindMessageBroker<ScanRequestedMessage>(options);
             Container.BindMessageBroker<ScanCompletedMessage>(options);
+
+            // Mini-games
             Container.BindMessageBroker<MiniGameStartedMessage>(options);
             Container.BindMessageBroker<MiniGameCompletedMessage>(options);
+
+            // Save
             Container.BindMessageBroker<SaveCompletedMessage>(options);
             Container.BindMessageBroker<SaveDeniedMessage>(options);
         }
@@ -58,18 +76,15 @@ namespace Archipelago.Core
 
         private void InstallInput()
         {
-            // InputReader — ScriptableObject, живёт в Assets/.
-            // Биндим как инстанс чтобы все потребители получили один и тот же SO.
             if (_inputReader != null)
                 Container.BindInstance(_inputReader).AsSingle();
             else
-                Debug.LogError("[SceneInstaller] InputReader не назначен. Создай asset и назначь в Inspector.");
+                Debug.LogError("[SceneInstaller] InputReader не назначен.");
 
-            // InputRouter — MonoBehaviour на Player, переключает Input Maps по SessionState.
             if (_inputRouter != null)
                 Container.Bind<InputRouter>().FromInstance(_inputRouter).AsSingle();
             else
-                Debug.LogWarning("[SceneInstaller] InputRouter не назначен в инспекторе.");
+                Debug.LogWarning("[SceneInstaller] InputRouter не назначен.");
         }
 
         // ── POCO Services ─────────────────────────────────────────
@@ -93,15 +108,19 @@ namespace Archipelago.Core
 
         private void InstallSceneObjects()
         {
+            Container.Bind<GameBootstrapper>()
+                .FromComponentInHierarchy()
+                .AsSingle();
+
             if (_gameLoopRunner != null)
                 Container.Bind<GameLoopRunner>().FromInstance(_gameLoopRunner).AsSingle();
             else
-                Debug.LogWarning("[SceneInstaller] GameLoopRunner не назначен в инспекторе.");
+                Debug.LogWarning("[SceneInstaller] GameLoopRunner не назначен.");
 
             if (_fpc != null)
                 Container.Bind<FirstPersonController>().FromInstance(_fpc).AsSingle();
             else
-                Debug.LogWarning("[SceneInstaller] FirstPersonController не назначен в инспекторе.");
+                Debug.LogWarning("[SceneInstaller] FirstPersonController не назначен.");
         }
     }
 }

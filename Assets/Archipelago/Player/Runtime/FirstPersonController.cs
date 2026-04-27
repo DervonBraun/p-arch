@@ -46,6 +46,16 @@ namespace Archipelago.Player
         private float   _pitch;
         private bool    _movementEnabled = true;
         private bool    _sprinting;
+        
+        private bool _injected;
+        
+        [Inject]
+        private void Construct()
+        {
+            _injected = true;
+            // Если OnEnable уже отработал до inject — подписываемся здесь.
+            if (isActiveAndEnabled) SubscribeInput();
+        }
 
         // ── Unity Lifecycle ──────────────────────────────────────
 
@@ -57,26 +67,48 @@ namespace Archipelago.Player
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible   = false;
         }
-
+        
         private void OnEnable()
         {
-            _inputReader.Moved          += OnMoved;
-            _inputReader.Looked         += OnLooked;
-            _inputReader.SprintStarted  += OnSprintStarted;
-            _inputReader.SprintCancelled += OnSprintCancelled;
+            if (!_injected) return;   // ещё нет зависимостей — пропускаем
+            SubscribeInput();
         }
 
         private void OnDisable()
         {
-            _inputReader.Moved          -= OnMoved;
-            _inputReader.Looked         -= OnLooked;
-            _inputReader.SprintStarted  -= OnSprintStarted;
-            _inputReader.SprintCancelled -= OnSprintCancelled;
+            if (!_injected) return;
+            UnsubscribeInput();
         }
 
         private void Start()
         {
+            // _injected гарантированно true к Start() — Zenject inject завершён.
             _subscription = _sessionSub.Subscribe(OnSessionStateChanged);
+        }
+
+        private void OnDestroy()
+        {
+            _subscription?.Dispose();
+            UnsubscribeInput();
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+        }
+        
+        private void SubscribeInput()
+        {
+            _inputReader.Moved           += OnMoved;
+            _inputReader.Looked          += OnLooked;
+            _inputReader.SprintStarted   += OnSprintStarted;
+            _inputReader.SprintCancelled += OnSprintCancelled;
+        }
+
+        private void UnsubscribeInput()
+        {
+            _inputReader.Moved           -= OnMoved;
+            _inputReader.Looked          -= OnLooked;
+            _inputReader.SprintStarted   -= OnSprintStarted;
+            _inputReader.SprintCancelled -= OnSprintCancelled;
         }
 
         private void Update()
@@ -84,14 +116,6 @@ namespace Archipelago.Player
             HandleLook();
             if (_movementEnabled) HandleMovement();
             ApplyGravity();
-        }
-
-        private void OnDestroy()
-        {
-            _subscription?.Dispose();
-
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible   = true;
         }
 
         // ── Input Handlers ────────────────────────────────────────
@@ -143,6 +167,12 @@ namespace Archipelago.Player
             bool freeCursor = msg.Next is SessionState.Scanning or SessionState.MiniGame;
             Cursor.lockState = freeCursor ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible   = freeCursor;
+        }
+        
+        public void SetCircleSearchCursor(bool visible)
+        {
+            Cursor.lockState = visible ? CursorLockMode.None : CursorLockMode.Locked;
+            Cursor.visible   = visible;
         }
     }
 }

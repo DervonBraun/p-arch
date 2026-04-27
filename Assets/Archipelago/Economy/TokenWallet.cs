@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Archipelago.Core;
 using UnityEngine;
 
 namespace Archipelago.Economy

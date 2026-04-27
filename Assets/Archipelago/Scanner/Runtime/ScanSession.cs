@@ -1,18 +1,17 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Archipelago.Scanner
 {
     /// <summary>
-    /// Хранит историю диалога одной сессии сканирования.
-    /// Создаётся при открытии сканера, уничтожается при закрытии.
+    /// Хранит историю диалога одной сессии сканера.
+    /// Создаётся при открытии панели, сбрасывается при закрытии.
     ///
-    /// Максимум MaxMessages пар user/assistant.
-    /// При превышении — вытесняется самое старое сообщение (sliding window).
-    /// Первое сообщение (автоматический "что это?") не считается за follow-up.
+    /// Сессия может содержать несколько объектов (из ScanCollection).
+    /// Максимум MaxMessages пар user/assistant — старые вытесняются (sliding window).
     /// </summary>
     public sealed class ScanSession
     {
-        public const int MaxMessages = 4;
+        public const int MaxMessages = 8;
 
         public readonly struct Message
         {
@@ -28,61 +27,51 @@ namespace Archipelago.Scanner
 
         // ── State ────────────────────────────────────────────────
 
-        public ScannableObjectSO CurrentObject { get; private set; }
-        public bool IsFirstScan               { get; private set; } = true;
-        public int  FollowUpCount             { get; private set; }
+        public IReadOnlyList<ScannableObjectSO> AttachedObjects { get; private set; }
+            = System.Array.Empty<ScannableObjectSO>();
+
+        public bool IsFirstScan   { get; private set; } = true;
+        public int  FollowUpCount { get; private set; }
 
         private readonly List<Message> _history = new(MaxMessages * 2);
 
         // ── Public API ───────────────────────────────────────────
 
-        /// <summary>Инициализирует сессию для конкретного объекта.</summary>
-        public void Begin(ScannableObjectSO obj)
+        public void Begin(IReadOnlyList<ScannableObjectSO> objects)
         {
-            CurrentObject = obj;
-            IsFirstScan   = true;
-            FollowUpCount = 0;
+            AttachedObjects = objects ?? System.Array.Empty<ScannableObjectSO>();
+            IsFirstScan     = true;
+            FollowUpCount   = 0;
             _history.Clear();
         }
 
-        /// <summary>Сбрасывает сессию при закрытии сканера.</summary>
         public void End()
         {
-            CurrentObject = null;
+            AttachedObjects = System.Array.Empty<ScannableObjectSO>();
             _history.Clear();
             IsFirstScan   = true;
             FollowUpCount = 0;
         }
 
-        /// <summary>Добавляет сообщение пользователя в историю.</summary>
         public void AddUserMessage(string content)
         {
             TrimIfNeeded();
             _history.Add(new Message("user", content));
-
             if (!IsFirstScan) FollowUpCount++;
             IsFirstScan = false;
         }
 
-        /// <summary>Добавляет ответ ассистента в историю.</summary>
         public void AddAssistantMessage(string content)
-        {
-            _history.Add(new Message("assistant", content));
-        }
+            => _history.Add(new Message("assistant", content));
 
-        /// <summary>Возвращает копию истории для сборки промпта.</summary>
         public IReadOnlyList<Message> GetHistory() => _history;
 
         // ── Internal ─────────────────────────────────────────────
 
-        // Если история переполнена — убираем старейшую пару user+assistant
         private void TrimIfNeeded()
         {
-            // _history содержит чередующиеся user/assistant пары
-            // MaxMessages ограничивает количество пар
             while (_history.Count >= MaxMessages * 2)
             {
-                // Удаляем первую пару (user + assistant)
                 if (_history.Count >= 2)
                 {
                     _history.RemoveAt(0);

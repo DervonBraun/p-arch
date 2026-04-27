@@ -12,7 +12,7 @@ namespace Archipelago.Session
     /// FreeRoam / любой не-Scanning стейт → Gameplay map
     /// Scanning (панель открыта)           → Scanner map
     ///
-    /// Attach на Player GameObject рядом с ScannerController.
+    /// Attach на Player GameObject рядом с CircleSearchController.
     /// THREAD: main thread only (MessagePipe доставляет на main thread).
     /// </summary>
     public sealed class InputRouter : MonoBehaviour

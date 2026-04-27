@@ -161,7 +161,16 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
                     ""id"": ""82479259-83db-44b7-8759-3fe54359ae1e"",
                     ""expectedControlType"": """",
                     ""processors"": """",
-                    ""interactions"": """",
+                    ""interactions"": ""Press(behavior=1)"",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""CircleSearch"",
+                    ""type"": ""Button"",
+                    ""id"": ""d4e5f6a7-b8c9-4d00-d111-e22222222222"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": ""Hold"",
                     ""initialStateCheck"": false
                 }
             ],
@@ -451,6 +460,17 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
                     ""action"": ""OpenPanel"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""f7a8b9c0-d1e2-4a00-f333-444444444444"",
+                    ""path"": ""<Keyboard>/tab"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""CircleSearch"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         },
@@ -666,6 +686,7 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
         m_Gameplay_Sprint = m_Gameplay.FindAction("Sprint", throwIfNotFound: true);
         m_Gameplay_Scan = m_Gameplay.FindAction("Scan", throwIfNotFound: true);
         m_Gameplay_OpenPanel = m_Gameplay.FindAction("OpenPanel", throwIfNotFound: true);
+        m_Gameplay_CircleSearch = m_Gameplay.FindAction("CircleSearch", throwIfNotFound: true);
         // Scanner
         m_Scanner = asset.FindActionMap("Scanner", throwIfNotFound: true);
         m_Scanner_Submit = m_Scanner.FindAction("Submit", throwIfNotFound: true);
@@ -765,6 +786,7 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
     private readonly InputAction m_Gameplay_Sprint;
     private readonly InputAction m_Gameplay_Scan;
     private readonly InputAction m_Gameplay_OpenPanel;
+    private readonly InputAction m_Gameplay_CircleSearch;
     /// <summary>
     /// Provides access to input actions defined in input action map "Gameplay".
     /// </summary>
@@ -808,6 +830,10 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
         /// Provides access to the underlying input action "Gameplay/OpenPanel".
         /// </summary>
         public InputAction @OpenPanel => m_Wrapper.m_Gameplay_OpenPanel;
+        /// <summary>
+        /// Provides access to the underlying input action "Gameplay/CircleSearch".
+        /// </summary>
+        public InputAction @CircleSearch => m_Wrapper.m_Gameplay_CircleSearch;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -858,6 +884,9 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
             @OpenPanel.started += instance.OnOpenPanel;
             @OpenPanel.performed += instance.OnOpenPanel;
             @OpenPanel.canceled += instance.OnOpenPanel;
+            @CircleSearch.started += instance.OnCircleSearch;
+            @CircleSearch.performed += instance.OnCircleSearch;
+            @CircleSearch.canceled += instance.OnCircleSearch;
         }
 
         /// <summary>
@@ -893,6 +922,9 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
             @OpenPanel.started -= instance.OnOpenPanel;
             @OpenPanel.performed -= instance.OnOpenPanel;
             @OpenPanel.canceled -= instance.OnOpenPanel;
+            @CircleSearch.started -= instance.OnCircleSearch;
+            @CircleSearch.performed -= instance.OnCircleSearch;
+            @CircleSearch.canceled -= instance.OnCircleSearch;
         }
 
         /// <summary>
@@ -1279,6 +1311,13 @@ public partial class @ArchipelagoInputActions: IInputActionCollection2, IDisposa
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnOpenPanel(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "CircleSearch" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnCircleSearch(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "Scanner" which allows adding and removing callbacks.

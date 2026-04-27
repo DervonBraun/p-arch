@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections;
+using Archipelago.Core;
 using Archipelago.Economy;
 using MessagePipe;
 using TMPro;
 using UnityEngine;
 using Zenject;
+using TokenBalance = Archipelago.Core.TokenBalance;
+using TokenType = Archipelago.Core.TokenType;
 
 namespace Archipelago.UI
 {
@@ -40,12 +43,29 @@ namespace Archipelago.UI
         [SerializeField] private float _pulseDuration = 0.25f;
         [SerializeField] private float _pulseScale    = 1.3f;
 
-        // ── Subscriptions ─────────────────────────────────────────
+        // ── State ─────────────────────────────────────────────────
 
         private IDisposable _subs;
+        private bool        _injected;
+
+        // ── Zenject ───────────────────────────────────────────────
+
+        [Inject]
+        private void Construct()
+        {
+            _injected = true;
+        }
+
+        // ── Unity Lifecycle ───────────────────────────────────────
 
         private void Start()
         {
+            if (!_injected)
+            {
+                Debug.LogError("[HUDTokenDisplay] Start() before Zenject inject.");
+                return;
+            }
+
             var bag = DisposableBag.CreateBuilder();
             _changedSub.Subscribe(OnTokensChanged).AddTo(bag);
             _syncedSub .Subscribe(OnTokensSynced) .AddTo(bag);
@@ -99,12 +119,11 @@ namespace Archipelago.UI
 
             if (target == null) return;
 
-            // Раскомментировать когда DOTween подключён в проекте:
+            // Раскомментировать когда DOTween подключён:
             // target.transform
             //     .DOPunchScale(Vector3.one * (_pulseScale - 1f), _pulseDuration, 1, 0.5f)
-            //     .SetUpdate(true); // работает даже при паузе
+            //     .SetUpdate(true);
 
-            // Корутина-фоллбэк (не требует внешних зависимостей)
             StopAllCoroutines();
             StartCoroutine(PulseCoroutine(target.transform));
         }
@@ -116,7 +135,6 @@ namespace Archipelago.UI
             float   half     = _pulseDuration * 0.5f;
             float   elapsed  = 0f;
 
-            // Scale up
             while (elapsed < half)
             {
                 elapsed += Time.unscaledDeltaTime;
@@ -126,7 +144,6 @@ namespace Archipelago.UI
 
             elapsed = 0f;
 
-            // Scale down
             while (elapsed < half)
             {
                 elapsed += Time.unscaledDeltaTime;

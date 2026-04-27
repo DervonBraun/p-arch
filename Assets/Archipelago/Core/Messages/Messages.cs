@@ -1,28 +1,114 @@
 ﻿// ============================================================
-//  АРХИПЕЛАГ — MessagePipe Message Definitions
+//  АРХИПЕЛАГ — MessagePipe Message Definitions + Shared Types
 //
 //  All inter-system communication goes through typed structs.
 //  No system holds a direct reference to another.
 //
 //  Naming:  <Noun><PastTenseVerb>Message
-//  Binding: Registered in ProjectInstaller via
-//           container.BindMessageBroker<T>()
+//  Binding: Registered in SceneInstaller via
+//           Container.BindMessageBroker<T>()
+//
+//  ВАЖНО: TokenType, TokenAmount, TokenBalance — канонические
+//         определения здесь. TokenTypes.cs и EconomyMessages.cs
+//         удалены. Все файлы используют Archipelago.Core.
 // ============================================================
 
 namespace Archipelago.Core
 {
+    // ── Shared Token Types ────────────────────────────────────
+
+    /// <summary>
+    /// Три типа валют. Строковые значения совпадают с именами полей на сервере.
+    /// </summary>
+    public enum TokenType
+    {
+        Red   = 0,  // Mini-games
+        Green = 1,  // Garden (passive)
+        Blue  = 2,  // Routine + Scanner — primary progress currency
+    }
+
+    /// <summary>
+    /// Пара тип + количество. Используется в запросах spend/earn.
+    /// </summary>
+    public readonly struct TokenAmount
+    {
+        public readonly TokenType Type;
+        public readonly int       Amount;
+
+        public TokenAmount(TokenType type, int amount)
+        {
+            Type   = type;
+            Amount = amount;
+        }
+
+        public override string ToString() => $"{Amount} {Type}";
+    }
+
+    /// <summary>
+    /// Снимок баланса всех трёх валют. Value type — безопасно копировать.
+    /// </summary>
+    public readonly struct TokenBalance
+    {
+        public readonly int Red;
+        public readonly int Green;
+        public readonly int Blue;
+
+        public TokenBalance(int red, int green, int blue)
+        {
+            Red   = red;
+            Green = green;
+            Blue  = blue;
+        }
+
+        public int Get(TokenType type) => type switch
+        {
+            TokenType.Red   => Red,
+            TokenType.Green => Green,
+            TokenType.Blue  => Blue,
+            _               => 0,
+        };
+
+        public TokenBalance With(TokenType type, int newValue) => type switch
+        {
+            TokenType.Red   => new TokenBalance(newValue, Green, Blue),
+            TokenType.Green => new TokenBalance(Red, newValue, Blue),
+            TokenType.Blue  => new TokenBalance(Red, Green, newValue),
+            _               => this,
+        };
+
+        public TokenBalance Apply(TokenType type, int delta)
+            => With(type, Get(type) + delta);
+
+        public static readonly TokenBalance Zero = new(0, 0, 0);
+
+        public override string ToString() => $"R:{Red} G:{Green} B:{Blue}";
+    }
+
+    // ── Session State ─────────────────────────────────────────
+
+    public enum SessionState
+    {
+        None,
+        WakeUp,
+        FreeRoam,
+        MiniGame,
+        Scanning,
+        Routine,
+        CodeComplete,
+        End
+    }
+
     // ── Clock ────────────────────────────────────────────────
 
     /// <summary>
     /// Published every in-game tick by GameClock.
-    /// Frequency = GameClock.TickInterval (default: every real frame).
     /// Do NOT use for per-frame logic — prefer Update() or UniTask loops.
     /// </summary>
     public readonly struct GameTickMessage
     {
-        public readonly float TotalGameTime;   // accumulated in-game seconds
-        public readonly float DeltaGameTime;   // in-game delta (not Time.deltaTime)
-        public readonly int   DayIndex;        // 0-based
+        public readonly float TotalGameTime;
+        public readonly float DeltaGameTime;
+        public readonly int   DayIndex;
 
         public GameTickMessage(float total, float delta, int day)
         {
@@ -57,20 +143,51 @@ namespace Archipelago.Core
     // ── Economy ──────────────────────────────────────────────
 
     /// <summary>
-    /// Published after any confirmed token balance change.
-    /// HUD subscribes to update counters.
+    /// Публикуется TokenService при любом изменении баланса.
+    /// UI подписывается и обновляет счётчики.
     /// </summary>
     public readonly struct TokensChangedMessage
     {
-        public readonly TokenType TokenType;
-        public readonly int       Delta;       // positive = earned, negative = spent
-        public readonly int       NewBalance;
+        public readonly TokenBalance OldBalance;
+        public readonly TokenBalance NewBalance;
+        public readonly TokenType    ChangedType;
+        public readonly int          Delta;
+        public readonly string       Reason;
 
-        public TokensChangedMessage(TokenType type, int delta, int newBalance)
+        public TokensChangedMessage(
+            TokenBalance old,
+            TokenBalance next,
+            TokenType    type,
+            int          delta,
+            string       reason)
         {
-            TokenType  = type;
-            Delta      = delta;
-            NewBalance = newBalance;
+            OldBalance  = old;
+            NewBalance  = next;
+            ChangedType = type;
+            Delta       = delta;
+            Reason      = reason;
+        }
+    }
+
+    /// <summary>Публикуется когда баланс успешно синхронизирован с сервером.</summary>
+    public readonly struct TokensSyncedMessage
+    {
+        public readonly TokenBalance ServerBalance;
+        public TokensSyncedMessage(TokenBalance balance) => ServerBalance = balance;
+    }
+
+    /// <summary>Публикуется когда spend отклонён (недостаточно токенов).</summary>
+    public readonly struct TokensInsufficientMessage
+    {
+        public readonly TokenType Type;
+        public readonly int       Required;
+        public readonly int       Current;
+
+        public TokensInsufficientMessage(TokenType type, int required, int current)
+        {
+            Type     = type;
+            Required = required;
+            Current  = current;
         }
     }
 
@@ -107,8 +224,8 @@ namespace Archipelago.Core
     /// </summary>
     public readonly struct RoutineCompletedMessage
     {
-        public readonly string RoutineId;  // "eat" | "clean" | "water_garden"
-        public readonly float  Quality;    // 0–1 reward scalar
+        public readonly string RoutineId;
+        public readonly float  Quality;
 
         public RoutineCompletedMessage(string id, float quality)
         {
@@ -118,6 +235,24 @@ namespace Archipelago.Core
     }
 
     // ── Scanner ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Published by CircleSearchController when an object is captured (success=true)
+    /// or when a draw gesture finds nothing (success=false).
+    /// </summary>
+    public readonly struct ObjectCapturedMessage
+    {
+        public readonly string ObjectId;
+        public readonly string DisplayName;
+        public readonly bool   Success;
+
+        public ObjectCapturedMessage(string objectId, string displayName, bool success)
+        {
+            ObjectId    = objectId;
+            DisplayName = displayName;
+            Success     = success;
+        }
+    }
 
     /// <summary>Published when scanner fires a request (for UI loading indicator).</summary>
     public readonly struct ScanRequestedMessage
@@ -165,7 +300,7 @@ namespace Archipelago.Core
     {
         public readonly string MiniGameId;
         public readonly bool   Success;
-        public readonly float  Quality;   // 0–1
+        public readonly float  Quality;
 
         public MiniGameCompletedMessage(string id, bool success, float quality)
         {
@@ -190,29 +325,5 @@ namespace Archipelago.Core
         public readonly int Required;
         public readonly int Current;
         public SaveDeniedMessage(int required, int current) { Required = required; Current = current; }
-    }
-}
-
-// ── Shared Enums ─────────────────────────────────────────────
-
-namespace Archipelago.Core
-{
-    public enum TokenType
-    {
-        Red,    // Mini-games
-        Green,  // Garden (passive)
-        Blue    // Routine + Scanner — primary progress currency
-    }
-
-    public enum SessionState
-    {
-        None,
-        WakeUp,
-        FreeRoam,
-        MiniGame,
-        Scanning,
-        Routine,
-        CodeComplete,
-        End
     }
 }

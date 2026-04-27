@@ -53,6 +53,10 @@ namespace Archipelago.Scanner
         [Tooltip("Награда синими токенами за уточняющий вопрос.")]
         public int blueRewardFollowUp = 1;
 
+        [Header("UI")]
+        [Tooltip("Спрайт превью — отображается чипом в чате сканера.")]
+        public Sprite thumbnailSprite;
+
         [Header("Lore")]
         [Tooltip("Фрагмент лора, добавляемый в архив после первого скана.")]
         [TextArea(2, 5)]

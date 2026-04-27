@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Archipelago.Core;
 
 namespace Archipelago.Economy
 {

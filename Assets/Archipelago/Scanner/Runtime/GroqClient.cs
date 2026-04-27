@@ -23,8 +23,8 @@ namespace Archipelago.Scanner
 
         public sealed class ScanRequest
         {
-            [JsonProperty("objectId")]
-            public string ObjectId { get; set; }
+            [JsonProperty("objectIds")]
+            public List<string> ObjectIds { get; set; }
 
             [JsonProperty("messages")]
             public List<MessageDto> Messages { get; set; }
