@@ -386,4 +386,40 @@ namespace Archipelago.Core
         public MonitoringStateMessage(float[] values, float[] outTime, float time)
         { Values = values; OutOfZoneTime = outTime; TimeRemaining = time; }
     }
+    public readonly struct RoomChangedMessage
+    {
+        /// <summary>
+        /// Идентификатор комнаты. Возможные значения:
+        /// "hub" | "garden" | "gallery" | "residential" | "generator" | "reservoir" | "street"
+        /// </summary>
+        public readonly string RoomId;
+        public RoomChangedMessage(string roomId) => RoomId = roomId;
+    }
+
+    // ── Flags ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Публикуется FlagService при любом изменении флагов.
+    /// ScannerUIController подписывается для показа предупреждений.
+    /// </summary>
+    public readonly struct FlagsUpdatedMessage
+    {
+        public readonly PlayerProfile.FlagProfile Flags;
+        public FlagsUpdatedMessage(PlayerProfile.FlagProfile flags) => Flags = flags;
+    }
+
+    /// <summary>
+    /// Публикуется FlagService когда сканер блокируется (ABUSE >= 3).
+    /// ScannerUIController показывает таймер обратного отсчёта.
+    /// </summary>
+    public readonly struct ScannerBlockedMessage
+    {
+        public readonly System.DateTime BlockedUntil;
+        public ScannerBlockedMessage(System.DateTime until) => BlockedUntil = until;
+    }
+    public readonly struct SaveLoadedMessage
+    {
+        public readonly int SlotIndex;
+        public SaveLoadedMessage(int slot) => SlotIndex = slot;
+    }
 }

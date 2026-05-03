@@ -31,6 +31,9 @@ namespace Archipelago.Scanner
 
             [JsonProperty("playerId")]
             public string PlayerId { get; set; }
+            
+            [JsonProperty("playerProfile")]
+            public string PlayerProfile { get; set; }
         }
 
         public sealed class MessageDto
@@ -49,6 +52,12 @@ namespace Archipelago.Scanner
 
             [JsonProperty("blueTokensAwarded")]
             public int BlueTokensAwarded { get; set; }
+
+            [JsonProperty("flags")]
+            public string[] Flags { get; set; }   // <-- новый
+
+            [JsonProperty("tone")]
+            public string Tone { get; set; }      // <-- новый
         }
 
         // ── Private ──────────────────────────────────────────────

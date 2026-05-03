@@ -43,6 +43,7 @@ namespace Archipelago.Effects
             _appliedPub = appliedPub;
             _expiredPub = expiredPub;
         }
+        public IEnumerable<string> GetActiveEffectIds() => _active.Keys;
 
         // ── IInitializable ────────────────────────────────────────
 
@@ -54,6 +55,26 @@ namespace Archipelago.Effects
         public void Dispose()
         {
             _tickSub?.Dispose();
+        }
+        public void Restore(EffectDefinitionSO definition, int stacks, float remainingTime)
+        {
+            var effect = new ActiveEffect(definition);
+            for (int i = 1; i < stacks; i++) 
+                effect.AddStack();
+
+            effect.SetRemainingTime(remainingTime);
+            _active[definition.effectId] = effect;
+            _appliedPub.Publish(new EffectAppliedMessage(definition.effectId, stacks, remainingTime));
+        }
+        public void ClearAll()
+        {
+            foreach (var (id, effect) in _active)
+            { 
+                if (_handlers.TryGetValue(id, out var h)) 
+                    h.OnExpire(effect);
+                _expiredPub.Publish(new EffectExpiredMessage(id));
+            }
+            _active.Clear();
         }
 
         // ── Handler registration ──────────────────────────────────

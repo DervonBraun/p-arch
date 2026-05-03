@@ -1,4 +1,7 @@
 ﻿// Assets/Effects/Runtime/ActiveEffect.cs
+
+using UnityEngine;
+
 namespace Archipelago.Effects
 {
     /// <summary>
@@ -40,6 +43,10 @@ namespace Archipelago.Effects
 
             CurrentStacks++;
             return true;
+        }
+        public void SetRemainingTime(float time)
+        {
+            RemainingTime = Mathf.Clamp(time, 0f, Definition.maxDuration);
         }
 
         /// <summary>Уменьшить таймер на deltaTime (игровые секунды).</summary>

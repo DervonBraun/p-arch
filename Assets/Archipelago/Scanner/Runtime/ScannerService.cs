@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using Archipelago.Core;
 using Archipelago.Economy;
+using Archipelago.PlayerProfile;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using UnityEngine;
@@ -14,15 +15,11 @@ namespace Archipelago.Scanner
     /// <summary>
     /// Orchestrates scanner queries.
     ///
-    /// Lifecycle:
-    ///   SessionStateChangedMessage(→ Scanning)  → OpenSession from current ScanCollection
-    ///   SessionStateChangedMessage(Scanning → *) → CloseSession
-    ///   SendQuery(text)                          → POST to Groq proxy, publish ScanCompleted
-    ///
-    /// No auto-query on session open. First query always originates from the player.
-    /// Cost tracking (IsFirstRequest) is delegated to ScanSession.IsFirstScan.
-    ///
-    /// NOT responsible for UI or token deduction — other systems subscribe to messages.
+    /// Этап 5 additions:
+    ///   — Проверка FlagService.IsBlocked перед отправкой
+    ///   — BuildProfileString() инжектируется в system[1]
+    ///   — ApplyFlags() из JSON ответа сервера
+    ///   — TrackStrangeScan() / TrackFollowUpQuery() для метрик
     /// </summary>
     public sealed class ScannerService : IInitializable, IDisposable
     {
@@ -41,34 +38,39 @@ namespace Archipelago.Scanner
         private readonly ScanCache                               _cache;
         private readonly ScannerConfig                           _config;
         private readonly ScanCollection                          _collection;
+        private readonly EconomyConfig                           _economyConfig;
+        private readonly TokenService                            _tokenService;
+        private readonly PlayerProfileTracker                    _profileTracker;
+        private readonly FlagService                             _flagService;
         private readonly IPublisher<ScanRequestedMessage>        _requestPub;
         private readonly IPublisher<ScanCompletedMessage>        _completedPub;
         private readonly ISubscriber<SessionStateChangedMessage> _stateSub;
-        
-        private readonly EconomyConfig _economyConfig;
-        private readonly TokenService  _tokenService;
-        
+
         [Inject]
         public ScannerService(
             GroqClient                               groqClient,
             ScanCache                                cache,
             ScannerConfig                            config,
-            EconomyConfig                            economyConfig,   // <-- новый
-            TokenService                             tokenService,    // <-- новый
+            EconomyConfig                            economyConfig,
+            TokenService                             tokenService,
+            PlayerProfileTracker                     profileTracker,
+            FlagService                              flagService,
             ScanCollection                           collection,
             IPublisher<ScanRequestedMessage>         requestPub,
             IPublisher<ScanCompletedMessage>         completedPub,
             ISubscriber<SessionStateChangedMessage>  stateSub)
         {
-            _groqClient    = groqClient;
-            _cache         = cache;
-            _config        = config;
-            _economyConfig = economyConfig;
-            _tokenService  = tokenService;
-            _collection    = collection;
-            _requestPub    = requestPub;
-            _completedPub  = completedPub;
-            _stateSub      = stateSub;
+            _groqClient     = groqClient;
+            _cache          = cache;
+            _config         = config;
+            _economyConfig  = economyConfig;
+            _tokenService   = tokenService;
+            _profileTracker = profileTracker;
+            _flagService    = flagService;
+            _collection     = collection;
+            _requestPub     = requestPub;
+            _completedPub   = completedPub;
+            _stateSub       = stateSub;
         }
 
         // ── IInitializable / IDisposable ─────────────────────────
@@ -87,15 +89,19 @@ namespace Archipelago.Scanner
 
         // ── Public API ────────────────────────────────────────────
 
-        /// <summary>
-        /// Sends a player query against all currently attached objects.
-        /// Fires ScanRequestedMessage immediately, ScanCompletedMessage on response.
-        /// </summary>
         public void SendQuery(string userQuery)
         {
             if (IsScanning)
             {
                 Debug.LogWarning("[ScannerService] Request already in progress.");
+                return;
+            }
+
+            // ── Блокировка (ABUSE >= 3) ───────────────────────────
+            if (_flagService.IsBlocked)
+            {
+                var remaining = _flagService.BlockedRemaining;
+                Debug.LogWarning($"[ScannerService] Scanner blocked. Remaining: {remaining.Minutes}m {remaining.Seconds}s");
                 return;
             }
 
@@ -139,7 +145,7 @@ namespace Archipelago.Scanner
             var objects = _session.AttachedObjects;
             if (objects.Count == 0) return;
 
-            // ── Cost check ────────────────────────────────────────────
+            // ── Cost check ────────────────────────────────────────
             var cost = ScanCostCalculator.Calculate(
                 attachedObjectCount: objects.Count,
                 questionText:        query,
@@ -148,20 +154,22 @@ namespace Archipelago.Scanner
 
             if (!_tokenService.CanAfford(TokenType.Red, cost.Red))
             {
-                Debug.Log($"[ScannerService] Insufficient red tokens: need {cost.Red}, have {_tokenService.Balance.Red}");
+                Debug.Log($"[ScannerService] Insufficient red: need {cost.Red}");
                 return;
             }
             if (cost.Green > 0 && !_tokenService.CanAfford(TokenType.Green, cost.Green))
             {
-                Debug.Log($"[ScannerService] Insufficient green tokens: need {cost.Green}, have {_tokenService.Balance.Green}");
+                Debug.Log($"[ScannerService] Insufficient green: need {cost.Green}");
                 return;
             }
 
-            if (cost.Red > 0)
-                _tokenService.Spend(TokenType.Red, cost.Red, "scan_query");
-            if (cost.Green > 0)
-                _tokenService.Spend(TokenType.Green, cost.Green, "scan_init");
-            // ─────────────────────────────────────────────────────────
+            if (cost.Red   > 0) _tokenService.Spend(TokenType.Red,   cost.Red,   "scan_query");
+            if (cost.Green > 0) _tokenService.Spend(TokenType.Green, cost.Green, "scan_init");
+            // ─────────────────────────────────────────────────────
+
+            // Трекинг уточняющего вопроса
+            if (!_session.IsFirstScan)
+                _profileTracker.TrackFollowUpQuery();
 
             IsScanning = true;
             _session.AddUserMessage(query);
@@ -180,6 +188,10 @@ namespace Archipelago.Scanner
                 {
                     var response = await _groqClient.SendScanRequestAsync(request, ct);
                     responseText = response.Response;
+
+                    // Применяем флаги из ответа сервера
+                    if (response.Flags != null && response.Flags.Length > 0)
+                        _flagService.ApplyFlags(response.Flags);
                 }
                 catch (GroqClientException ex)
                 {
@@ -204,15 +216,19 @@ namespace Archipelago.Scanner
 
         private GroqClient.ScanRequest BuildRequest(IReadOnlyList<ScannableObjectSO> objects)
         {
+            // Пересчитываем флаги перед каждым запросом
+            _flagService.RefreshBehaviorFlags();
+
             var messages = new List<GroqClient.MessageDto>();
             foreach (var msg in _session.GetHistory())
                 messages.Add(new GroqClient.MessageDto { Role = msg.Role, Content = msg.Content });
 
             return new GroqClient.ScanRequest
             {
-                ObjectIds = objects.Select(o => o.objectId).ToList(),
-                Messages  = messages,
-                PlayerId = _economyConfig.DevPlayerId
+                ObjectIds     = objects.Select(o => o.objectId).ToList(),
+                Messages      = messages,
+                PlayerId      = _economyConfig.DevPlayerId,
+                PlayerProfile = _profileTracker.BuildProfileString(),
             };
         }
     }

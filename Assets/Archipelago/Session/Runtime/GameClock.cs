@@ -123,6 +123,11 @@ namespace Archipelago.Session
                 _tickPublisher.Publish(new GameTickMessage(TotalGameTime, DeltaGameTime, DayIndex));
             }
         }
+        public void Restore(float totalGameTime, int dayIndex)
+        {
+           TotalGameTime = totalGameTime;
+           DayIndex      = dayIndex;
+        }
 
         // ── ISaveable ────────────────────────────────────────────
 

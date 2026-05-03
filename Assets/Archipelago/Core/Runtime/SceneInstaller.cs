@@ -77,6 +77,13 @@ namespace Archipelago.Core
             // Save
             Container.BindMessageBroker<SaveCompletedMessage>(options);
             Container.BindMessageBroker<SaveDeniedMessage>(options);
+            
+            Container.BindMessageBroker<RoomChangedMessage>(options);
+            Container.BindMessageBroker<FlagsUpdatedMessage>(options);
+            Container.BindMessageBroker<ScannerBlockedMessage>(options);
+            
+            Container.BindMessageBroker<SaveLoadedMessage>(options);
+
         }
 
         // ── Input ─────────────────────────────────────────────────

@@ -174,5 +174,12 @@ namespace Archipelago.Player
             Cursor.lockState = visible ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible   = visible;
         }
+        public void Teleport(Vector3 position)
+        {
+            var cc = GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            transform.position = position;
+            if (cc != null) cc.enabled = true;
+        }
     }
 }
