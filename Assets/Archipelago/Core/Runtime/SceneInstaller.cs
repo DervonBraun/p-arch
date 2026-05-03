@@ -57,6 +57,10 @@ namespace Archipelago.Core
             Container.BindMessageBroker<EarnMultiplierChangedMessage>(options);   // <-- новый
             Container.BindMessageBroker<CleanStateChangedMessage>(options);       // <-- новый
             Container.BindMessageBroker<GardenMultiplierChangedMessage>(options); // <-- новый
+            Container.BindMessageBroker<GardenStateChangedMessage>(options);
+            Container.BindMessageBroker<CalibrationStateMessage>(options);
+            Container.BindMessageBroker<WireRepairStateMessage>(options);
+            Container.BindMessageBroker<MonitoringStateMessage>(options);
 
             // Routine
             Container.BindMessageBroker<RoutineCompletedMessage>(options);

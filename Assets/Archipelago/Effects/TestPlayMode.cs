@@ -1,17 +1,25 @@
-﻿using UnityEngine;
+﻿using Archipelago.Economy;
+using Archipelago.MiniGames;
+using UnityEngine;
 using Zenject;
 
 namespace Archipelago.Effects
 {
     public class TestPlayMode : MonoBehaviour
     {
-        [Inject] private RoutineManager  _routineManager;
-        [SerializeField] private RoutineDefinitionSO _eatRoutine;
+        [Inject] private MiniGameManager _miniGameManager;
+        [Inject] private GardenService   _gardenService;
 
-        private void Update()
+        void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F5))
-                _routineManager.ExecuteRoutine(_eatRoutine);
+            if (Input.GetKeyDown(KeyCode.F6))
+                _miniGameManager.StartGame("calibration");
+
+            if (Input.GetKeyDown(KeyCode.F7))
+            {
+                int collected = _gardenService.Collect();
+                Debug.Log($"Collected {collected} green tokens");
+            }
         }
     }
 }

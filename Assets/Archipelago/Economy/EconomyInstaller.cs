@@ -20,6 +20,7 @@ namespace Archipelago.Economy
 
         [Header("Scene References")]
         [SerializeField] private HUDTokenDisplay _hudTokenDisplay;
+        [SerializeField] private GardenConfig _gardenConfig;
 
         public override void InstallBindings()
         {
@@ -45,6 +46,15 @@ namespace Archipelago.Economy
             // NonLazy: создаётся сразу при старте сцены, не ждёт первого резолва.
             // Это нужно чтобы InitializeAsync() запустился через IInitializable.
             Container.BindInterfacesAndSelfTo<TokenService>()
+                .AsSingle()
+                .NonLazy();
+            
+            if (_gardenConfig != null)
+                Container.BindInstance(_gardenConfig).AsSingle();
+            else
+                Debug.LogWarning("[EconomyInstaller] GardenConfig не назначен.");
+
+            Container.BindInterfacesAndSelfTo<GardenService>()
                 .AsSingle()
                 .NonLazy();
 

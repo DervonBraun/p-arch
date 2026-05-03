@@ -110,9 +110,14 @@ namespace Archipelago.UI
 
         private void AnimatePulse(TokenType type)
         {
-            TMP_Text target = type switch { /* без изменений */ };
-            if (target == null) return;
-
+            TMP_Text target = type switch
+            {
+                TokenType.Red   => _redLabel,
+                TokenType.Green => _greenLabel,
+                TokenType.Blue  => _blueLabel,
+                _               => null,
+            };
+            
             if (_pulseCoroutine != null)
                 StopCoroutine(_pulseCoroutine);                    // только нашу корутину
             _pulseCoroutine = StartCoroutine(PulseCoroutine(target.transform));

@@ -349,4 +349,41 @@ namespace Archipelago.Core
         public GardenMultiplierChangedMessage(float multiplier, string source)
         { Multiplier = multiplier; Source = source; }
     }
+    public readonly struct GardenStateChangedMessage
+    {
+        public readonly int  Accumulated;
+        public readonly bool IsDecaying;    // true если близко к decay (80% таймера)
+        public GardenStateChangedMessage(int accumulated, bool isDecaying)
+        { Accumulated = accumulated; IsDecaying = isDecaying; }
+    }
+
+
+    public readonly struct CalibrationStateMessage
+    {
+        public readonly float NeedlePosition;  // [-1, 1]
+        public readonly float PlayerPosition;  // [-1, 1]
+        public readonly bool  InZone;
+        public CalibrationStateMessage(float needle, float player, bool inZone)
+        { NeedlePosition = needle; PlayerPosition = player; InZone = inZone; }
+    }
+
+    /// <summary>State tick от WireRepairGame → UI.</summary>
+    public readonly struct WireRepairStateMessage
+    {
+        public readonly bool[]  Connected;
+        public readonly float   TimeRemaining;
+        public readonly int     SelectedIndex;  // -1 если ничего не выбрано
+        public WireRepairStateMessage(bool[] connected, float time, int selected)
+        { Connected = connected; TimeRemaining = time; SelectedIndex = selected; }
+    }
+
+    /// <summary>State tick от MonitoringGame → UI.</summary>
+    public readonly struct MonitoringStateMessage
+    {
+        public readonly float[] Values;         // [-1, 1] для каждого параметра
+        public readonly float[] OutOfZoneTime;  // секунд вне зоны подряд
+        public readonly float   TimeRemaining;
+        public MonitoringStateMessage(float[] values, float[] outTime, float time)
+        { Values = values; OutOfZoneTime = outTime; TimeRemaining = time; }
+    }
 }
