@@ -732,6 +732,46 @@ MonoBehaviour:
   cameraClusterRange:
     m_OverrideState: 1
     m_Value: 10
+--- !u!114 &-4406150472986949185
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e848f4150156b8f44b570945ecc790fb, type: 3}
+  m_Name: PS1PixelateVolume
+  m_EditorClassIdentifier: Assembly-CSharp::Archipelago.Rendering.PS1PixelateVolume
+  active: 1
+  Enabled:
+    m_OverrideState: 1
+    m_Value: 0
+  MinDownscale:
+    m_OverrideState: 1
+    m_Value: 1
+  MaxDownscale:
+    m_OverrideState: 1
+    m_Value: 4
+  LuminanceThreshold:
+    m_OverrideState: 1
+    m_Value: 0.3
+  ColorLevels:
+    m_OverrideState: 1
+    m_Value: 32
+  QuantizationStrength:
+    m_OverrideState: 1
+    m_Value: 0.8
+  DitheringEnabled:
+    m_OverrideState: 1
+    m_Value: 1
+  BayerSize:
+    m_OverrideState: 1
+    m_Value: 4
+  DitheringStrength:
+    m_OverrideState: 1
+    m_Value: 0.5
 --- !u!114 &-4215884883729795297
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -1252,6 +1292,7 @@ MonoBehaviour:
   - {fileID: -5694315667890283981}
   - {fileID: -1122826570882678536}
   - {fileID: -3882165550228800652}
+  - {fileID: -4406150472986949185}
 --- !u!114 &115208106948651533
 MonoBehaviour:
   m_ObjectHideFlags: 3

@@ -1,20 +1,12 @@
 ﻿using System;
 using Archipelago.Core;
-using Archipelago.Session;
 using MessagePipe;
 using UnityEngine;
 using Zenject;
 
 namespace Archipelago.Player
 {
-    /// <summary>
-    /// First-person character controller.
-    /// Движение и взгляд читаются через InputReader (события Moved / Looked).
-    /// Блокировка движения — по SessionStateChangedMessage (без изменений).
-    ///
-    /// PERF: Camera pitch clamped every frame — O(1), no allocations.
-    /// THREAD: main thread only.
-    /// </summary>
+    [DefaultExecutionOrder(-10)]
     [RequireComponent(typeof(CharacterController))]
     public sealed class FirstPersonController : MonoBehaviour
     {
@@ -37,40 +29,50 @@ namespace Archipelago.Player
 
         // ── Private ──────────────────────────────────────────────
 
-        private CharacterController _cc;
-        private IDisposable         _subscription;
+        private CharacterController  _cc;
+        private PlayerFeelController _feelController;
+        private IDisposable          _subscription;
 
-        private Vector3 _velocity;
         private Vector2 _moveInput;
         private Vector2 _lookInput;
         private float   _pitch;
-        private bool    _movementEnabled = true;
+        private float   _verticalVelocity;
         private bool    _sprinting;
-        
+
+        // Явный дефолт true — не ждём SessionStateChangedMessage при старте
+        private bool _movementEnabled = true;
         private bool _injected;
-        
+
+        // Считаем скорость сами — не зависим от cc.velocity
+        private Vector3 _trackedVelocity;
+
+        public Vector3 Velocity     => _trackedVelocity;
+        public bool    IsGrounded  => _cc.isGrounded;
+        public float   SprintSpeed => _sprintSpeed;
+
+        // ── Zenject ──────────────────────────────────────────────
+
         [Inject]
         private void Construct()
         {
             _injected = true;
-            // Если OnEnable уже отработал до inject — подписываемся здесь.
             if (isActiveAndEnabled) SubscribeInput();
         }
 
-        // ── Unity Lifecycle ──────────────────────────────────────
+        // ── Lifecycle ────────────────────────────────────────────
 
         private void Awake()
         {
-            // PERF: cache — never call GetComponent in Update
-            _cc = GetComponent<CharacterController>();
+            _cc             = GetComponent<CharacterController>();
+            _feelController = GetComponent<PlayerFeelController>();
 
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible   = false;
         }
-        
+
         private void OnEnable()
         {
-            if (!_injected) return;   // ещё нет зависимостей — пропускаем
+            if (!_injected) return;
             SubscribeInput();
         }
 
@@ -82,7 +84,6 @@ namespace Archipelago.Player
 
         private void Start()
         {
-            // _injected гарантированно true к Start() — Zenject inject завершён.
             _subscription = _sessionSub.Subscribe(OnSessionStateChanged);
         }
 
@@ -94,7 +95,7 @@ namespace Archipelago.Player
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
         }
-        
+
         private void SubscribeInput()
         {
             _inputReader.Moved           += OnMoved;
@@ -111,38 +112,49 @@ namespace Archipelago.Player
             _inputReader.SprintCancelled -= OnSprintCancelled;
         }
 
+        // ── Update ───────────────────────────────────────────────
+
         private void Update()
         {
             HandleLook();
-            if (_movementEnabled) HandleMovement();
-            ApplyGravity();
+            HandleMovement();
+            HandleGravity();
         }
 
-        // ── Input Handlers ────────────────────────────────────────
+        // ── Input ────────────────────────────────────────────────
 
-        private void OnMoved(Vector2 value)           => _moveInput = value;
-        private void OnLooked(Vector2 value)          => _lookInput = value;
-        private void OnSprintStarted()                => _sprinting = true;
-        private void OnSprintCancelled()              => _sprinting = false;
+        private void OnMoved(Vector2 v)   => _moveInput = v;
+        private void OnLooked(Vector2 v)  => _lookInput = v;
+        private void OnSprintStarted()    => _sprinting = true;
+        private void OnSprintCancelled()  => _sprinting = false;
 
         // ── Movement ─────────────────────────────────────────────
 
         private void HandleMovement()
         {
-            float   speed = _sprinting ? _sprintSpeed : _walkSpeed;
-            Vector3 dir   = transform.right   * _moveInput.x
-                          + transform.forward * _moveInput.y;
+            Vector3 horizontal = Vector3.zero;
 
-            _cc.Move(dir * (speed * Time.deltaTime));
+            if (_movementEnabled && _moveInput.sqrMagnitude > 0.001f)
+            {
+                float   speed = _sprinting ? _sprintSpeed : _walkSpeed;
+                Vector3 dir   = transform.right   * _moveInput.x
+                              + transform.forward * _moveInput.y;
+                horizontal = dir.normalized * speed;
+            }
+
+            _cc.Move((horizontal + Vector3.up * _verticalVelocity) * Time.deltaTime);
+
+            // Сохраняем желаемую скорость — не cc.velocity, которая может быть
+            // нулём из-за коллизий или скин-виджа CharacterController
+            _trackedVelocity = new Vector3(horizontal.x, _verticalVelocity, horizontal.z);
         }
 
-        private void ApplyGravity()
+        private void HandleGravity()
         {
-            if (_cc.isGrounded && _velocity.y < 0f)
-                _velocity.y = -2f;
+            if (_cc.isGrounded && _verticalVelocity < 0f)
+                _verticalVelocity = -2f;
 
-            _velocity.y += _gravity * Time.deltaTime;
-            _cc.Move(_velocity * Time.deltaTime);
+            _verticalVelocity += _gravity * Time.deltaTime;
         }
 
         // ── Look ─────────────────────────────────────────────────
@@ -155,10 +167,16 @@ namespace Archipelago.Player
             _pitch  = Mathf.Clamp(_pitch, -_pitchClamp, _pitchClamp);
 
             if (_cameraRoot != null)
-                _cameraRoot.localEulerAngles = new Vector3(_pitch, 0f, 0f);
+            {
+                // Не трогаем Z — его пишет PlayerFeelController (tilt)
+                var e = _cameraRoot.localEulerAngles;
+                _cameraRoot.localEulerAngles = new Vector3(_pitch, e.y, e.z);
+            }
+
+            _feelController?.NotifyLookDelta(_lookInput);
         }
 
-        // ── Session State ─────────────────────────────────────────
+        // ── Session ──────────────────────────────────────────────
 
         private void OnSessionStateChanged(SessionStateChangedMessage msg)
         {
@@ -168,18 +186,20 @@ namespace Archipelago.Player
             Cursor.lockState = freeCursor ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible   = freeCursor;
         }
-        
+
+        // ── Public API ───────────────────────────────────────────
+
         public void SetCircleSearchCursor(bool visible)
         {
             Cursor.lockState = visible ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible   = visible;
         }
+
         public void Teleport(Vector3 position)
         {
-            var cc = GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
+            _cc.enabled        = false;
             transform.position = position;
-            if (cc != null) cc.enabled = true;
+            _cc.enabled        = true;
         }
     }
 }

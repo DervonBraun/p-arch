@@ -332,7 +332,7 @@ MonoBehaviour:
       cachedAreaLightShadowAtlas: 1024
       allowDirectionalMixedCachedShadows: 0
       shadowResolutionDirectional:
-        m_Values: 40000000800000000004000000080000
+        m_Values: 80000000800000000004000000080000
         m_SchemaId:
           m_Id: With4Levels
       shadowResolutionPunctual:
