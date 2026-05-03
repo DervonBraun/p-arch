@@ -20,10 +20,10 @@ MonoBehaviour:
   hrtfNormalizationType: 0
   SOFAFiles: []
   defaultMaterial: {fileID: 11400000, guid: a086f686223eed942816c70be67841b0, type: 2}
-  sceneType: 0
+  sceneType: 3
   layerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 8
   maxOcclusionSamples: 16
   realTimeRays: 4096
   realTimeBounces: 4
