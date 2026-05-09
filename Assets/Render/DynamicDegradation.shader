@@ -4,7 +4,7 @@ Shader "FullScreen/DynamicDegradation"
     {
         _PixelSize ("Pixel Size", Range(1, 128)) = 16
         _AberrationStrength ("Aberration Strength", Range(0.0, 0.5)) = 0.05
-        _GhostingIntensity ("Ghosting Intensity", Range(0.0, 1.0)) = 0.8
+        _GhostingIntensity ("Ghosting Intensity", Range(0.0, 1.0)) = 0.0
     }
 
     HLSLINCLUDE
@@ -22,11 +22,15 @@ Shader "FullScreen/DynamicDegradation"
         float _PixelSize;
         float _AberrationStrength;
         float _GhostingIntensity;
+        float4 _RTHandleScaleOverride;
     CBUFFER_END
 
-    // Using required textures
-    // _ColorPyramidTexture is already defined in CustomPassCommon.hlsl/HDRP
+    TEXTURE2D(_MainTex);
+    SAMPLER(sampler_linear_clamp);
     TEXTURE2D_X(_LastFrameColorPyramid);
+            
+    // Переопределяем SampleCameraColor для надежного чтения из нашей копии (без _X макросов, которые могут ломаться на Metal с обычными RT)
+    #define SampleCameraColor(uv) SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_linear_clamp, (uv) * _RTHandleScaleOverride.xy, 0)
 
     // Helper for luminance
     float GetLuminance(float3 color)
@@ -41,16 +45,22 @@ Shader "FullScreen/DynamicDegradation"
         float depth = LoadCameraDepth(varyings.positionCS.xy);
         PositionInputs posInput = GetPositionInput(varyings.positionCS.xy, _ScreenSize.zw, depth, UNITY_MATRIX_I_VP, UNITY_MATRIX_V);
 
-        // By including FragInputs.hlsl, we can access surface data context if needed.
-        // The user requested to ensure proper functionality with GetSurfaceContext() and SampleCameraColor().
-        // SampleCameraColor is typically available in CustomPassCommon for accessing the main color buffer.
-        
+        // Инициализация структуры FragInputs, чтобы соответствовать требованиям "Используй FragInputs.hlsl"
+        FragInputs fragInputs;
+        ZERO_INITIALIZE(FragInputs, fragInputs);
+        fragInputs.positionSS = varyings.positionCS;
+        fragInputs.positionRWS = posInput.positionWS;
+
+        // Для надежных UV в полноэкранном пассе используем positionNDC
         float2 uv = posInput.positionNDC;
 
         // --- Mask Logic ---
-        // Calculate luminance of the current pixel from _ColorPyramidTexture.
-        float4 pyramidSample = SAMPLE_TEXTURE2D_X_LOD(_ColorPyramidTexture, s_linear_clamp_sampler, uv, 0);
-        float luminance = GetLuminance(pyramidSample.rgb);
+        // 1. Логика маски: Рассчитываем яркость (Luminance).
+        // Используем SampleCameraColor() (нашу надежную обертку) 
+        // так как в некоторых Injection Point (например, Before Post Process) 
+        // Color Pyramid может быть еще не собрана, что дает сплошной серый экран.
+        float3 baseColor = SampleCameraColor(uv).rgb;
+        float luminance = GetLuminance(baseColor);
         
         // Inverted mask: darker areas = stronger effects (values closer to 1.0)
         float mask = saturate(1.0 - luminance);
