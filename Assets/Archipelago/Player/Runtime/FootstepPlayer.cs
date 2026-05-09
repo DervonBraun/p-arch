@@ -1,97 +1,53 @@
-using SteamAudio;
 using UnityEngine;
-using Vector3 = UnityEngine.Vector3;
+using FMODUnity; // Добавляем интеграцию FMOD
 
 namespace Archipelago.Player
 {
-    /// <summary>
-    /// Воспроизводит шаги через SteamAudioSource.
-    /// Определяет поверхность под ногами через raycast → PhysicsMaterial.
-    /// Вызывается из PlayerFeelController.
-    ///
-    /// Требования:
-    ///   • SteamAudioSource на этом же GameObject (или назначен вручную)
-    ///   • FootstepSurfaceDatabase назначена в инспекторе
-    ///   • SteamAudioGeometry на мешах сцены
-    ///   • SteamAudioListener на камере / Audio Listener
-    /// </summary>
-    [RequireComponent(typeof(SteamAudioSource))]
     public sealed class FootstepPlayer : MonoBehaviour
     {
-        // ── Inspector ─────────────────────────────────────────────
+        [Header("FMOD Settings")]
+        [SerializeField] private EventReference _footstepEvent;
+        [SerializeField] private string _surfaceParameterName = "Surface";
 
         [Header("Database")]
         [SerializeField] private FootstepSurfaceDatabase _database;
 
-        [Header("Audio")]
-        [SerializeField] [Range(0f, 1f)]   private float _masterVolume      = 0.5f;
-        [SerializeField] [Range(0f, 0.3f)] private float _pitchVariance     = 0.08f;
-
         [Header("Raycast")]
-        [SerializeField] private float _raycastDistance  = 1.2f;
+        [SerializeField] private float _raycastDistance = 1.2f;
         [SerializeField] private LayerMask _groundLayers = ~0;
 
-        // ── Private ───────────────────────────────────────────────
+        private PhysicsMaterial _lastMaterial;
 
-        private SteamAudioSource _steamSource;
-
-        // Кэш последнего материала — не делаем новый raycast если не шевелились
-        private PhysicsMaterial  _lastMaterial;
-
-        // ── Lifecycle ─────────────────────────────────────────────
-
-        private void Awake()
-        {
-            _steamSource = GetComponent<SteamAudioSource>();
-
-            // SteamAudioSource должен быть настроен на прямую передачу звука
-            // (Direct Sound, Occlusion, Reverb) — через Inspector на компоненте.
-            // Здесь мы только воспроизводим клипы.
-        }
-
-        // ── Public API ────────────────────────────────────────────
-
-        /// <summary>
-        /// Вызывается из PlayerFeelController когда пора сделать шаг.
-        /// </summary>
         public void PlayStep()
         {
-            if (_database == null || _steamSource == null) return;
+            if (_footstepEvent.IsNull) return;
 
             PhysicsMaterial surface = ResolveSurface();
-
-            if (!_database.TryResolve(surface, out AudioClip clip, out float volumeMult))
+            
+            // Получаем индекс поверхности из базы (просто int или float для параметра)
+            if (!_database.TryResolve(surface, out float parameterValue))
                 return;
 
-            // SteamAudioSource не поддерживает PlayOneShot —
-            // меняем клип и вызываем Play, предварительно остановив предыдущий
-            _steamSource.GetComponent<AudioSource>().pitch =
-                1f + Random.Range(-_pitchVariance, _pitchVariance);
-
-            // Воспроизводим через нативный AudioSource который лежит под SteamAudioSource
-            var audioSource = _steamSource.GetComponent<AudioSource>();
-            audioSource.clip   = clip;
-            audioSource.volume = _masterVolume * volumeMult;
-            audioSource.Play();
+            // Создаем инстанс события
+            var instance = RuntimeManager.CreateInstance(_footstepEvent);
+            
+            // Привязываем к объекту для работы Steam Audio (позиционирование)
+            RuntimeManager.AttachInstanceToGameObject(instance, transform);
+            
+            // Устанавливаем поверхность
+            instance.setParameterByName(_surfaceParameterName, parameterValue);
+            
+            // Играем и освобождаем память
+            instance.start();
+            instance.release();
         }
-
-        // ── Surface Detection ─────────────────────────────────────
 
         private PhysicsMaterial ResolveSurface()
         {
-            // Raycast строго вниз от позиции игрока
-            if (Physics.Raycast(
-                    transform.position,
-                    Vector3.down,
-                    out RaycastHit hit,
-                    _raycastDistance,
-                    _groundLayers,
-                    QueryTriggerInteraction.Ignore))
+            if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, _raycastDistance, _groundLayers, QueryTriggerInteraction.Ignore))
             {
                 _lastMaterial = hit.collider.sharedMaterial;
             }
-
-            // Возвращаем последний известный материал даже если raycast промахнулся
             return _lastMaterial;
         }
     }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{e192609a-a37b-4bbc-b41b-2e4eb5ff9ff4}">
+		<property name="assetPath">
+			<value>Wooden Foosteps (1).mp3</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>8.0718367346938784</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{5237e098-8a86-48a1-b918-1b615db13f39}</destination>
+		</relationship>
+	</object>
+</objects>

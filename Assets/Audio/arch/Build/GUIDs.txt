@@ -1,0 +1,5 @@
+{513239e0-cccb-4b4d-8493-dbd0dd5e5492} bank:/Master
+{c92f1934-bdb0-070f-02da-512e2cad520a} bank:/Master.strings
+{bcc4556d-839f-436f-a930-6c30eae3fa5e} bus:/
+{c6872109-6778-4c53-88cc-a9690e053402} bus:/Reverb
+{0cdf3c91-171c-49ac-abfd-527634a19c7a} event:/ambient_room

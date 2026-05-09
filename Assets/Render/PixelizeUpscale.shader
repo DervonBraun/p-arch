@@ -6,13 +6,10 @@ Shader "PS1/PixelizeUpscale"
 
         _BlockLight   ("Block Size (light)",  Range(1, 64)) = 4
         _BlockDark    ("Block Size (dark)",   Range(1, 64)) = 12
-        _LumThreshold ("Lum Threshold", Range(0, 1)) = 0.35
+        _LumThreshold ("Lum Threshold",       Range(0, 1)) = 0.35
+        _LumSoftness  ("Lum Softness",        Range(0.001, 1)) = 0.25
 
-        _DitherScale  ("Dither Scale (px)",   Range(1, 8)) = 2
-        _DitherStrength ("Dither Strength",   Range(0, 1)) = 0.85
-        _ShadowThreshold ("Shadow Threshold", Range(0, 1)) = 0.45
-        _ShadowSoftness  ("Shadow Softness",  Range(0.001, 1)) = 0.3
-        _ColorLevels  ("Color Levels (per channel)", Range(2, 256)) = 32
+        _ColorLevels  ("Color Levels",        Range(2, 256)) = 32
 
         _ScreenSizeOverride ("Screen Size", Vector) = (1920, 1080, 0, 0)
         _RTHandleScaleOverride ("RTHandle Scale", Vector) = (1, 1, 0, 0)
@@ -46,11 +43,8 @@ Shader "PS1/PixelizeUpscale"
             float  _BlockLight;
             float  _BlockDark;
             float  _LumThreshold;
+            float  _LumSoftness;
 
-            float  _DitherScale;
-            float  _DitherStrength;
-            float  _ShadowThreshold;
-            float  _ShadowSoftness;
             float  _ColorLevels;
 
             float4 _ScreenSizeOverride;
@@ -66,7 +60,9 @@ Shader "PS1/PixelizeUpscale"
 
             float GetBayer4x4(int2 pixelCoord)
             {
-                int2 c = pixelCoord & 3;
+                // % через побитовое И работает только для положительных int.
+                // floor() может дать отрицательный результат у краёв — на всякий случай abs.
+                int2 c = abs(pixelCoord) & 3;
                 return Bayer4x4[c.y * 4 + c.x];
             }
 
@@ -75,6 +71,7 @@ Shader "PS1/PixelizeUpscale"
                 return dot(c, float3(0.2126, 0.7152, 0.0722));
             }
 
+            // Привязка UV к центру блока заданного размера
             float2 SnapUVToBlock(float2 uv, float blockSize, float2 screenSize)
             {
                 float2 pixelCoord = uv * screenSize;
@@ -101,41 +98,78 @@ Shader "PS1/PixelizeUpscale"
             float4 frag(Varyings input) : SV_Target
             {
                 float2 screenSize    = _ScreenSizeOverride.xy;
+                float2 invScreenSize = _ScreenSizeOverride.zw;
                 float2 rtHandleScale = _RTHandleScaleOverride.xy;
                 float2 vpUV = input.uv;
 
-                // 1. Считаем мелкую сетку (для светлых зон)
+                // ----------------------------------------------------------
+                // 1. Считаем ОПОРНУЮ яркость для решения "крупный/мелкий блок"
+                //
+                //    КЛЮЧЕВОЕ ИЗМЕНЕНИЕ:
+                //    Раньше яркость бралась из уже мелко-семплированного цвета (colLight),
+                //    из-за чего любая тёмная деталь (контур, тень) внутри светлой области
+                //    локально опускала яркость и переключала шейдер на крупный блок —
+                //    отсюда "много артефактов в светлых областях".
+                //
+                //    Решение: считать яркость по УСРЕДНЁННОМУ цвету в окне размером
+                //    с крупный блок (_BlockDark). Линейная фильтрация даёт нам этот
+                //    усреднённый сэмпл бесплатно, если просто взять центр блока.
+                //    Плюс — снимаем 4 сэмпла с бихинейарной фильтрацией внутри блока,
+                //    чтобы ещё стабильнее усреднить.
+                // ----------------------------------------------------------
+                float2 darkBlockCenterVP = SnapUVToBlock(vpUV, _BlockDark, screenSize);
+                float2 lumOffset         = (_BlockDark * 0.25) * invScreenSize;
+
+                float2 s0 = (darkBlockCenterVP + float2(-lumOffset.x, -lumOffset.y)) * rtHandleScale;
+                float2 s1 = (darkBlockCenterVP + float2( lumOffset.x, -lumOffset.y)) * rtHandleScale;
+                float2 s2 = (darkBlockCenterVP + float2(-lumOffset.x,  lumOffset.y)) * rtHandleScale;
+                float2 s3 = (darkBlockCenterVP + float2( lumOffset.x,  lumOffset.y)) * rtHandleScale;
+
+                float3 avg = 0.25 * (
+                    SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_linear_clamp, s0, 0).rgb +
+                    SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_linear_clamp, s1, 0).rgb +
+                    SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_linear_clamp, s2, 0).rgb +
+                    SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_linear_clamp, s3, 0).rgb
+                );
+
+                // Тон-маппинг яркости в [0..1] для устойчивости к HDR
+                float lumLin = Luminance709(avg);
+                float lum    = lumLin / (1.0 + lumLin);
+
+                // ----------------------------------------------------------
+                // 2. Семплируем мелкий и крупный варианты пикселизации
+                // ----------------------------------------------------------
                 float2 snappedLightVP = SnapUVToBlock(vpUV, _BlockLight, screenSize);
                 float2 snappedLightRT = snappedLightVP * rtHandleScale;
                 float4 colLight = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_point_clamp, snappedLightRT, 0);
 
-                // Оцениваем яркость именно по мелкой сетке. Это убьет всё мерцание!
-                float lumLin = Luminance709(colLight.rgb);
-                float lum    = lumLin / (1.0 + lumLin);
-
-                // 2. Считаем крупную сетку (для тёмных зон)
                 float2 snappedDarkVP  = SnapUVToBlock(vpUV, _BlockDark, screenSize);
                 float2 snappedDarkRT  = snappedDarkVP * rtHandleScale;
                 float4 colDark  = SAMPLE_TEXTURE2D_LOD(_MainTex, sampler_point_clamp, snappedDarkRT, 0);
 
-                // 3. ФИКС: Жесткий выбор ЦВЕТА, а не размера блока. 
-                // step вернет 1, если яркость выше порога (светло), и 0 если ниже (темно).
-                // Никаких разрывов UV-сеток, просто переключаем два идеальных слоя.
-                float t = step(_LumThreshold, lum);
-                float4 col = lerp(colDark, colLight, t);
+                // ----------------------------------------------------------
+                // 3. Плавный переход через bayer-дитер по сетке КРУПНОГО блока.
+                //
+                //    Считаем дитер по _BlockDark — тогда каждая "клетка" перехода
+                //    имеет размер ровно крупного пикселя, и переход выглядит как
+                //    мозаика: часть крупных клеток заменяется блоком из мелких пикселей.
+                //    (Раньше было по _BlockLight, что давало более шумную границу.)
+                // ----------------------------------------------------------
+                float t = smoothstep(_LumThreshold, _LumThreshold + _LumSoftness, lum);
 
-                // 4. Dither и квантование
-                int2 ditherCoord = int2(floor(vpUV * screenSize / _DitherScale));
-                float bayer      = GetBayer4x4(ditherCoord);
+                int2 transitionDitherCoord = int2(floor(vpUV * screenSize / _BlockDark));
+                float transitionBayer      = GetBayer4x4(transitionDitherCoord);
 
-                float shadowMask = 1.0 - smoothstep(_ShadowThreshold, _ShadowThreshold + _ShadowSoftness, lum);
-                float ditherK      = _DitherStrength * shadowMask;
-                float ditherOffset = (bayer - 0.5) * ditherK;
+                // mixMask = 1 → мелкий пиксель (светло), 0 → крупный (темно)
+                float mixMask = step(transitionBayer, t - (1.0/16.0)*0.5);
+                float4 col = lerp(colDark, colLight, mixMask);
 
+                // ----------------------------------------------------------
+                // 4. Квантование цвета (PS1-стиль)
+                // ----------------------------------------------------------
                 float levels = max(_ColorLevels - 1.0, 1.0);
-                float3 q = col.rgb;
-                q = q + ditherOffset / levels;
-                q = floor(saturate(q) * levels + 0.5) / levels;
+                float3 q = saturate(col.rgb);
+                q = floor(q * levels + 0.5) / levels;
 
                 return float4(q, col.a);
             }
